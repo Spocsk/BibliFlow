@@ -6,7 +6,7 @@ pipeline {
     }
 
     environment {
-        DOCKER_COMPOSE_FILE = "docker-compose.yml"
+        DOCKER_COMPOSE_FILE = "compose.yml"
     }
 
     stages {
@@ -35,10 +35,10 @@ pipeline {
         stage('Run Tests') {
             steps {
                 dir('bibliflow-backend') {
-                    sh 'npm test'
+                    sh 'npm run test'
                 }
                 dir('bibliflow-frontend') {
-                    sh 'npm run test -- --watch=false'
+                    sh 'npm run test'
                 }
             }
         }
