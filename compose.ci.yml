@@ -1,0 +1,71 @@
+version: "3.8"
+
+services:
+  postgres-test:
+    image: postgres:15-alpine
+    container_name: bibliflow_postgres_test
+    environment:
+      POSTGRES_DB: bibliflow_test
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+    volumes:
+      - ./database/init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - test_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mongodb-test:
+    image: mongo:7
+    container_name: bibliflow_mongodb_test
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: test_admin
+      MONGO_INITDB_ROOT_PASSWORD: test_password
+      MONGO_INITDB_DATABASE: bibliflow_logs_test
+    networks:
+      - test_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend-test:
+    build:
+      context: ./bibliflow-backend
+      dockerfile: Dockerfile.test
+    container_name: bibliflow_backend_test
+    environment:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://test_user:test_password@postgres-test:5432/bibliflow_test
+      MONGODB_URL: mongodb://test_admin:test_password@mongodb-test:27017/bibliflow_logs_test
+      JWT_SECRET: test-secret
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      mongodb-test:
+        condition: service_healthy
+    networks:
+      - test_network
+    command: npm run test:e2e
+
+  frontend-test:
+    build:
+      context: ./bibliflow-frontend
+      dockerfile: Dockerfile.test
+    container_name: bibliflow_frontend_test
+    environment:
+      NODE_ENV: test
+      API_URL: http://backend-test:3000/api/v1
+    depends_on:
+      - backend-test
+    networks:
+      - test_network
+    command: npm run test:ci
+
+networks:
+  test_network:
+    driver: bridge

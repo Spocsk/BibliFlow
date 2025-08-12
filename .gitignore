@@ -1,0 +1,40 @@
+# Node.js
+bibliflow-backend/node_modules/
+bibliflow-frontend/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output
+bibliflow-backend/dist/
+bibliflow-frontend/dist/
+bibliflow-backend/build/
+bibliflow-frontend/build/
+out/
+.next/
+coverage/
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# IDEs
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Misc
+*.local
+*.swp
+*.swo

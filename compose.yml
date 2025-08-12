@@ -1,0 +1,148 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: bibliflow_postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-bibliflow_dev}
+      POSTGRES_USER: ${DB_USER:-bibliflow_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dev_password}
+      POSTGRES_HOST_AUTH_METHOD: trust # Pour le développement uniquement
+    env_file:
+      - .env
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432" # Exposé pour debug/admin
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init-scripts:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DB_USER:-bibliflow_user} -d ${DB_NAME:-bibliflow_dev}",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: on-failure
+
+  mongodb:
+    image: mongo:7-jammy
+    container_name: bibliflow_mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-dev_password}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-bibliflow_logs_dev}
+    env_file:
+      - .env
+    ports:
+      - "${MONGO_PORT:-27017}:27017" # Exposé pour debug/admin
+    volumes:
+      - mongodb_data:/data/db
+      - ./database/mongo-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: on-failure
+
+  backend:
+    build:
+      context: ./bibliflow-backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: bibliflow_backend
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://${DB_USER:-bibliflow_user}:${DB_PASSWORD:-dev_password}@postgres:5432/${DB_NAME:-bibliflow_dev}
+      MONGODB_URL: mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD:-dev_password}@mongodb:27017/${MONGO_DB:-bibliflow_logs_dev}?authSource=admin
+      JWT_SECRET: ${JWT_SECRET:-dev_jwt_secret_change_in_production}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:4200,http://127.0.0.1:4200}
+      # Variables pour le hot reload
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+      # Debug
+      DEBUG: ${DEBUG:-bibliflow:*}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+    env_file:
+      - .env
+    volumes:
+      - ./bibliflow-backend:/usr/src/app:cached # Code source (hot reload)
+      - backend_node_modules:/usr/src/app/node_modules # Cache npm (performance)
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+      - "${DEBUG_PORT:-9229}:9229" # Port debug Node.js
+    command: npm run start:dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    restart: on-failure
+    init: true # Pour une meilleure gestion des signaux
+
+  frontend:
+    build:
+      context: ./bibliflow-frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: bibliflow_frontend
+    environment:
+      API_URL: ${API_URL:-http://localhost:3000/api/v1}
+      NODE_ENV: development
+      # Variables pour le hot reload
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+      WDS_SOCKET_HOST: localhost
+      WDS_SOCKET_PORT: ${FRONTEND_PORT:-4200}
+      # Performance
+      NG_CLI_ANALYTICS: false
+    env_file:
+      - .env
+    volumes:
+      - ./bibliflow-frontend:/usr/src/app:cached
+      - frontend_node_modules:/usr/src/app/node_modules
+    ports:
+      - "${FRONTEND_PORT:-4200}:4200"
+    command: npm run start -- --host 0.0.0.0 --poll 2000
+    # depends_on:
+    #   backend:
+    #     condition: service_healthy
+    restart: on-failure
+    init: true
+
+  jenkins:
+    build:
+      context: ./jenkins
+      dockerfile: Dockerfile
+    container_name: bibliflow_jenkins
+    user: root
+    environment:
+      JAVA_OPTS: "-Djenkins.install.runSetupWizard=false"
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: on-failure
+    depends_on:
+      - backend
+      - frontend
+      - postgres
+      - mongodb
+
+volumes:
+  postgres_data:
+    driver: local
+  mongodb_data:
+    driver: local
+  backend_node_modules:
+    driver: local
+  frontend_node_modules:
+    driver: local
+  jenkins_home:
+    driver: local
