@@ -12,14 +12,14 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/tonuser/tonrepo.git'
+                git branch: 'main', url: 'https://github.com/Spocsk/BibliFlow'
             }
         }
 
         stage('Install Backend') {
             steps {
                 dir('bibliflow-backend') {
-                    sh 'npm install'
+                    sh 'npm i'
                 }
             }
         }
@@ -27,7 +27,7 @@ pipeline {
         stage('Install Frontend') {
             steps {
                 dir('bibliflow-frontend') {
-                    sh 'npm install'
+                    sh 'npm i'
                 }
             }
         }
