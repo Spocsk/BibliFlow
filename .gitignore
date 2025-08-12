@@ -11,6 +11,7 @@ bibliflow-backend/dist/
 bibliflow-frontend/dist/
 bibliflow-backend/build/
 bibliflow-frontend/build/
+bibliflow-frontend/.angular/
 out/
 .next/
 coverage/

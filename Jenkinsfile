@@ -38,7 +38,7 @@ pipeline {
                     sh 'npm run test'
                 }
                 dir('bibliflow-frontend') {
-                    sh 'npm run test'
+                    sh 'npm run test:ci'
                 }
             }
         }
