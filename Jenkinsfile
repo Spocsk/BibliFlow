@@ -10,9 +10,8 @@ pipeline {
   }
 
   environment {
-    // compose.yml est à la racine du workspace
-    DOCKER_COMPOSE_FILE = "${WORKSPACE}/compose.yml"
-    COMPOSE_PROJECT_NAME = "bibliflow"
+    DOCKER_COMPOSE_FILE = "${WORKSPACE}/compose.yml"   // compose à la racine
+    COMPOSE_PROJECT_NAME = "bibliflow"                 // projet fixe, idempotent
     CI = "true"
   }
 
@@ -23,9 +22,7 @@ pipeline {
       }
     }
 
-    // (tes stages Install Backend / Frontend restent identiques)
-
-    // Récupère le .env depuis les Credentials et l'écrit à la racine du workspace
+    // Si tu utilises le credential Secret file pour .env :
     stage('Prepare .env (from credentials)') {
       steps {
         withCredentials([file(credentialsId: 'BIBLIFLOW_DOTENV_FILE', variable: 'ENV_FILE')]) {
@@ -38,7 +35,6 @@ pipeline {
       }
     }
 
-    // Sanity checks
     stage('Preflight') {
       steps {
         dir("${WORKSPACE}") {
@@ -49,22 +45,31 @@ pipeline {
       }
     }
 
-    stage('Build & Deploy (apps)') {
+    // 1) DOWN — proprement, sans supprimer les volumes (on garde les données)
+    stage('Teardown stack') {
       steps {
-        sh 'docker compose -p ${COMPOSE_PROJECT_NAME} --project-directory ${WORKSPACE} -f ${DOCKER_COMPOSE_FILE} up -d --build --no-deps backend frontend'
+        sh 'docker compose -p ${COMPOSE_PROJECT_NAME} --project-directory ${WORKSPACE} -f ${DOCKER_COMPOSE_FILE} down --remove-orphans || true'
       }
     }
 
-    stage('Ensure DBs running (no recreate)') {
+    // 2) BUILD — rebuild des images (tous les services dont on a besoin)
+    stage('Build images') {
       steps {
-        sh 'docker compose -p ${COMPOSE_PROJECT_NAME} --project-directory ${WORKSPACE} -f ${DOCKER_COMPOSE_FILE} up -d --no-recreate postgres mongodb'
+        sh 'docker compose -p ${COMPOSE_PROJECT_NAME} --project-directory ${WORKSPACE} -f ${DOCKER_COMPOSE_FILE} build postgres mongodb backend frontend'
+      }
+    }
+
+    // 3) UP — relancer les services (on évite de lancer le service jenkins du compose)
+    stage('Deploy stack') {
+      steps {
+        sh 'docker compose -p ${COMPOSE_PROJECT_NAME} --project-directory ${WORKSPACE} -f ${DOCKER_COMPOSE_FILE} up -d postgres mongodb backend frontend'
       }
     }
   }
 
   post {
-    // Nettoyer le .env éphémère après le job
     always {
+      // Nettoie l’éventuel .env écrit depuis le credential
       sh 'shred -u "${WORKSPACE}/.env" || rm -f "${WORKSPACE}/.env" || true'
     }
   }
