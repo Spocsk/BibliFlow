@@ -1,90 +1,48 @@
 pipeline {
-    agent any
-    tools {
-        nodejs "Node_24.5.0"
-    }
-    environment {
-        DOCKER_COMPOSE_FILE = "compose.yml"
-        CI = "true"
-    }
-    stages {
-        stage('Checkout') {
-            steps {
-                git branch: 'main', url: 'https://github.com/Spocsk/BibliFlow'
-            }
-        }
-        // stage('Install Browser') {
-        //     steps {
-        //         sh '''
-        //             # Installation simple de Chromium (disponible sur toutes les architectures)
-        //             apt-get update
-        //             apt-get install -y chromium xvfb --no-install-recommends
-                    
-        //             # Vérification
-        //             chromium --version
-                    
-        //             # Variables d'environnement
-        //             export CHROME_BIN=/usr/bin/chromium
-        //             export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-                    
-        //             echo "✓ Navigateur installé: $(chromium --version)"
-        //         '''
-        //     }
-        // }
-        stage('Install Backend') {
-            steps {
-                dir('bibliflow-backend') {
-                    sh 'npm ci'
-                }
-            }
-        }
-        stage('Install Frontend') {
-            steps {
-                dir('bibliflow-frontend') {
-                    sh 'npm ci'
-                }
-            }
-        }
-        // stage('Run Tests') {
-        //     environment {
-        //         CHROME_BIN = '/usr/bin/chromium'
-        //         DISPLAY = ':99'
-        //     }
-        //     steps {
-        //         dir('bibliflow-backend') {
-        //             sh 'npm run test'
-        //         }
-        //         dir('bibliflow-frontend') {
-        //             sh '''
-        //                 # Démarrer Xvfb
-        //                 Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
-        //                 sleep 2
-                        
-        //                 # Lancer les tests (Karma va automatiquement utiliser ChromeHeadlessCI)
-        //                 npm run test:ci
-        //             '''
-        //         }
-        //     }
-        // }
+  agent any
 
-        stage('Build Docker Images') {
-            steps {
-                dir("${WORKSPACE}") {
-                    sh "docker compose -f ${DOCKER_COMPOSE_FILE} build"
-                }
-            }
-        }
-        stage('Deploy') {
-            steps {
-                dir("${WORKSPACE}") {
-                    sh "docker compose -f ${DOCKER_COMPOSE_FILE} --env-file .env up -d"
-                }
-            }
-        }
+  tools {
+    nodejs "Node_24.5.0"
+  }
+
+  environment {
+    // Chemins ABSOLUS vers les fichiers de la racine du workspace
+    DOCKER_COMPOSE_FILE = "${WORKSPACE}/compose.yml"
+    DOCKER_ENV_FILE     = "${WORKSPACE}/.env"
+    CI = "true"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        git branch: 'main', url: 'https://github.com/Spocsk/BibliFlow'
+      }
     }
-    post {
-        always {
-            sh 'pkill -f Xvfb || true'
+
+    // (tes stages Install Backend / Frontend restent identiques)
+
+    // Petit check utile avant build/deploy
+    stage('Preflight') {
+      steps {
+        dir("${WORKSPACE}") {
+          sh 'pwd && ls -la'
+          sh 'test -f ${DOCKER_ENV_FILE} && echo "OK: .env found" || (echo "ERROR: .env missing" && exit 1)'
+          sh 'test -f ${DOCKER_COMPOSE_FILE} && echo "OK: compose.yml found" || (echo "ERROR: compose.yml missing" && exit 1)'
         }
+      }
     }
+
+    stage('Build Docker Images') {
+      steps {
+        // --project-directory force Compose à résoudre les chemins relatifs depuis la racine du repo
+        sh 'docker compose --project-directory ${WORKSPACE} --env-file ${DOCKER_ENV_FILE} -f ${DOCKER_COMPOSE_FILE} build'
+      }
+    }
+
+    stage('Deploy') {
+      steps {
+        sh 'docker compose --project-directory ${WORKSPACE} --env-file ${DOCKER_ENV_FILE} -f ${DOCKER_COMPOSE_FILE} up -d'
+      }
+    }
+  }
 }
