@@ -6,6 +6,8 @@ pipeline {
     environment {
         DOCKER_COMPOSE_FILE = "compose.yml"
         CHROME_BIN = "/usr/bin/chromium"
+        PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
+        PUPPETEER_EXECUTABLE_PATH = "/usr/bin/chromium"
     }
     stages {
         stage('Checkout') {
@@ -16,17 +18,22 @@ pipeline {
         stage('Install System Dependencies') {
             steps {
                 sh '''
+                    # Update package lists
                     apt-get update
-                    apt-get install -y chromium chromium-driver xvfb
+                    
+                    # Install Chromium and dependencies for ARM64/AMD64
+                    apt-get install -y chromium xvfb dbus-x11 --no-install-recommends
                     
                     # Verify chromium installation
+                    chromium --version || echo "Chromium version check failed"
                     which chromium || echo "Chromium not found in PATH"
-                    ls -la /usr/bin/chromium* || echo "No chromium binaries found"
                     
-                    # Create symlink if needed
-                    if [ ! -f /usr/bin/chromium-browser ] && [ -f /usr/bin/chromium ]; then
-                        ln -sf /usr/bin/chromium /usr/bin/chromium-browser
-                    fi
+                    # Create symlinks for compatibility
+                    ln -sf /usr/bin/chromium /usr/bin/chromium-browser || true
+                    ln -sf /usr/bin/chromium /usr/bin/google-chrome || true
+                    
+                    # Clean up apt cache
+                    rm -rf /var/lib/apt/lists/*
                     
                     echo "CHROME_BIN will be: $CHROME_BIN"
                 '''
