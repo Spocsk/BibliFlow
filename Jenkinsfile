@@ -6,7 +6,7 @@ pipeline {
   }
 
   environment {
-    // Chemin absolu du compose à la racine du workspace
+    // compose.yml est à la racine du workspace
     DOCKER_COMPOSE_FILE = "${WORKSPACE}/compose.yml"
     CI = "true"
   }
@@ -20,33 +20,48 @@ pipeline {
 
     // (tes stages Install Backend / Frontend restent identiques)
 
-    // Vérifie compose.yml et la présence du credential .env
+    // Récupère le .env depuis les Credentials et l'écrit à la racine du workspace
+    stage('Prepare .env (from credentials)') {
+      steps {
+        withCredentials([file(credentialsId: 'BIBLIFLOW_DOTENV_FILE', variable: 'ENV_FILE')]) {
+          sh '''
+            cp "$ENV_FILE" "${WORKSPACE}/.env"
+            chmod 600 "${WORKSPACE}/.env"
+            echo "✓ .env copied to ${WORKSPACE}/.env"
+          '''
+        }
+      }
+    }
+
+    // Sanity checks
     stage('Preflight') {
       steps {
         dir("${WORKSPACE}") {
           sh 'pwd && ls -la'
           sh 'test -f ${DOCKER_COMPOSE_FILE} && echo "OK: compose.yml found" || (echo "ERROR: compose.yml missing" && exit 1)'
-        }
-        withCredentials([file(credentialsId: 'BIBLIFLOW_DOTENV_FILE', variable: 'ENV_FILE')]) {
-          sh 'echo "Using env file at: $ENV_FILE" && test -s "$ENV_FILE" && echo "OK: secret .env provided" || (echo "ERROR: secret .env is empty/missing" && exit 1)'
+          sh 'test -f .env && echo "OK: .env present" || (echo "ERROR: .env missing" && exit 1)'
         }
       }
     }
 
     stage('Build Docker Images') {
       steps {
-        withCredentials([file(credentialsId: 'BIBLIFLOW_DOTENV_FILE', variable: 'ENV_FILE')]) {
-          sh 'docker compose --project-directory ${WORKSPACE} --env-file "$ENV_FILE" -f ${DOCKER_COMPOSE_FILE} build'
-        }
+        // Pas besoin de --env-file ici : les services utilisent env_file: .env
+        sh 'docker compose --project-directory ${WORKSPACE} -f ${DOCKER_COMPOSE_FILE} build'
       }
     }
 
     stage('Deploy') {
       steps {
-        withCredentials([file(credentialsId: 'BIBLIFLOW_DOTENV_FILE', variable: 'ENV_FILE')]) {
-          sh 'docker compose --project-directory ${WORKSPACE} --env-file "$ENV_FILE" -f ${DOCKER_COMPOSE_FILE} up -d'
-        }
+        sh 'docker compose --project-directory ${WORKSPACE} -f ${DOCKER_COMPOSE_FILE} up -d'
       }
+    }
+  }
+
+  post {
+    // Nettoyer le .env éphémère après le job
+    always {
+      sh 'shred -u "${WORKSPACE}/.env" || rm -f "${WORKSPACE}/.env" || true'
     }
   }
 }
