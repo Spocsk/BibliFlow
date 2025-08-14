@@ -7,7 +7,7 @@ pipeline {
 
     environment {
         DOCKER_COMPOSE_FILE = "compose.yml"
-        CHROME_BIN = "/usr/bin/google-chrome"
+        CHROME_BIN = "/usr/bin/chromium-browser"
     }
 
     stages {
@@ -17,10 +17,21 @@ pipeline {
             }
         }
 
+        stage('Install Chromium') {
+            steps {
+                sh '''
+                    apt-get update
+                    apt-get install -y chromium-browser
+                    echo "CHROME_BIN=$(which chromium-browser)"
+                    which chromium-browser
+                '''
+            }
+        }
+
         stage('Install Backend') {
             steps {
                 dir('bibliflow-backend') {
-                    sh 'npm i'
+                    sh 'npm ci'
                 }
             }
         }
@@ -28,7 +39,7 @@ pipeline {
         stage('Install Frontend') {
             steps {
                 dir('bibliflow-frontend') {
-                    sh 'npm i'
+                    sh 'npm ci'
                 }
             }
         }
@@ -39,7 +50,7 @@ pipeline {
                     sh 'npm run test'
                 }
                 dir('bibliflow-frontend') {
-                    sh 'npm run test:ci'
+                    sh 'npm run test:ci -- --browsers=ChromeHeadlessNoSandbox'
                 }
             }
         }
