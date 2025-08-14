@@ -7,6 +7,7 @@ pipeline {
 
     environment {
         DOCKER_COMPOSE_FILE = "compose.yml"
+        CHROME_BIN = "/usr/bin/google-chrome"
     }
 
     stages {
