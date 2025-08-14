@@ -9,7 +9,7 @@ pipeline {
     environment {
         // === Deploy ===
         DOCKER_COMPOSE_DEPLOY_BASE = "${WORKSPACE}/compose.yml"
-        DOCKER_COMPOSE_DEPLOY_OVR = "${WORKSPACE}/compose.ci.deploy.yml" // optionnel
+        DOCKER_COMPOSE_DEPLOY_OVR = "${WORKSPACE}/compose.ci.yml" // optionnel
         COMPOSE_PROJECT_NAME_DEPLOY = "bibliflow"
         CI = "true"
     }
