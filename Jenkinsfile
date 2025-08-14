@@ -17,16 +17,16 @@ pipeline {
             }
         }
 
-        stage('Install Chromium') {
-            steps {
-                sh '''
-                    apt-get update
-                    apt-get install -y chromium-browser
-                    echo "CHROME_BIN=$(which chromium-browser)"
-                    which chromium-browser
-                '''
-            }
+    stage('Install Chromium') {
+        steps {
+            sh '''
+                apt-get update
+                apt-get install -y chromium
+                export CHROME_BIN=$(which chromium)
+                echo "CHROME_BIN set to: $CHROME_BIN"
+            '''
         }
+    }
 
         stage('Install Backend') {
             steps {
