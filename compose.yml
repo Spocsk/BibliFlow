@@ -111,7 +111,6 @@ services:
 
   # Jenkins local uniquement (ne sera PAS lancé en CI)
   jenkins:
-    profiles: ["local-jenkins"]
     build:
       context: ./jenkins
       dockerfile: Dockerfile
