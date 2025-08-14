@@ -69,12 +69,16 @@ pipeline {
 
         stage('Build Docker Images') {
             steps {
-                sh "docker compose -f ${DOCKER_COMPOSE_FILE} build"
+                dir("${WORKSPACE}") {
+                    sh "docker compose -f ${DOCKER_COMPOSE_FILE} build"
+                }
             }
         }
         stage('Deploy') {
             steps {
-                sh "docker compose -f ${DOCKER_COMPOSE_FILE} up -d"
+                dir("${WORKSPACE}") {
+                    sh "docker compose -f ${DOCKER_COMPOSE_FILE} up -d"
+                }
             }
         }
     }
