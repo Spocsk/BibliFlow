@@ -73,7 +73,7 @@ services:
       # Exclure node_modules pour éviter les conflits
       - backend_node_modules:/app/node_modules
     working_dir: /app
-    command: npm run start:dev
+    command: sh -c "cd /app && ls -la && test -f package.json && npm ci && npm run start:dev"
     depends_on:
       postgres:
         condition: service_healthy
@@ -105,12 +105,13 @@ services:
       # Exclure node_modules pour éviter les conflits
       - frontend_node_modules:/app/node_modules
     working_dir: /app
-    command: npm run start -- --host 0.0.0.0 --poll 2000
+    command: sh -c "cd /app && ls -la && test -f package.json && npm ci && npm run start -- --host 0.0.0.0 --poll 2000"
     restart: on-failure
     init: true
 
   # Jenkins local uniquement (ne sera PAS lancé en CI)
   jenkins:
+    profiles: ["local-jenkins"]
     build:
       context: ./jenkins
       dockerfile: Dockerfile
