@@ -8,6 +8,7 @@ pipeline {
   environment {
     // compose.yml est à la racine du workspace
     DOCKER_COMPOSE_FILE = "${WORKSPACE}/compose.yml"
+    COMPOSE_PROJECT_NAME = "bibliflow-ci-${BUILD_NUMBER}"
     CI = "true"
   }
 
@@ -44,16 +45,30 @@ pipeline {
       }
     }
 
+    stage('Cleanup conflicting containers') {
+      steps {
+        // Remove containers that use fixed container_name in compose.yml (to avoid name conflicts)
+        sh 'docker rm -f bibliflow_mongodb bibliflow_postgres bibliflow_backend bibliflow_frontend 2>/dev/null || true'
+      }
+    }
+
+    stage('Teardown previous CI stack') {
+      steps {
+        // Clean any previous CI project with the same COMPOSE_PROJECT_NAME
+        sh 'docker compose -p ${COMPOSE_PROJECT_NAME} -f ${DOCKER_COMPOSE_FILE} down --remove-orphans || true'
+      }
+    }
+
     stage('Build Docker Images') {
       steps {
         // Pas besoin de --env-file ici : les services utilisent env_file: .env
-        sh 'docker compose --project-directory ${WORKSPACE} -f ${DOCKER_COMPOSE_FILE} build'
+        sh 'docker compose -p ${COMPOSE_PROJECT_NAME} --project-directory ${WORKSPACE} -f ${DOCKER_COMPOSE_FILE} build postgres mongodb backend frontend'
       }
     }
 
     stage('Deploy') {
       steps {
-        sh 'docker compose --project-directory ${WORKSPACE} -f ${DOCKER_COMPOSE_FILE} up -d'
+        sh 'docker compose -p ${COMPOSE_PROJECT_NAME} --project-directory ${WORKSPACE} -f ${DOCKER_COMPOSE_FILE} up -d postgres mongodb backend frontend'
       }
     }
   }

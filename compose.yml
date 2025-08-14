@@ -115,6 +115,7 @@ services:
     init: true
 
   jenkins:
+    profiles: ["local-jenkins"]
     build:
       context: ./jenkins
       dockerfile: Dockerfile
