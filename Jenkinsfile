@@ -6,9 +6,8 @@ pipeline {
   }
 
   environment {
-    // Chemins ABSOLUS vers les fichiers de la racine du workspace
+    // Chemin absolu du compose à la racine du workspace
     DOCKER_COMPOSE_FILE = "${WORKSPACE}/compose.yml"
-    DOCKER_ENV_FILE     = "${WORKSPACE}/.env"
     CI = "true"
   }
 
@@ -21,27 +20,32 @@ pipeline {
 
     // (tes stages Install Backend / Frontend restent identiques)
 
-    // Petit check utile avant build/deploy
+    // Vérifie compose.yml et la présence du credential .env
     stage('Preflight') {
       steps {
         dir("${WORKSPACE}") {
           sh 'pwd && ls -la'
-          sh 'test -f ${DOCKER_ENV_FILE} && echo "OK: .env found" || (echo "ERROR: .env missing" && exit 1)'
           sh 'test -f ${DOCKER_COMPOSE_FILE} && echo "OK: compose.yml found" || (echo "ERROR: compose.yml missing" && exit 1)'
+        }
+        withCredentials([file(credentialsId: 'BIBLIFLOW_DOTENV_FILE', variable: 'ENV_FILE')]) {
+          sh 'echo "Using env file at: $ENV_FILE" && test -s "$ENV_FILE" && echo "OK: secret .env provided" || (echo "ERROR: secret .env is empty/missing" && exit 1)'
         }
       }
     }
 
     stage('Build Docker Images') {
       steps {
-        // --project-directory force Compose à résoudre les chemins relatifs depuis la racine du repo
-        sh 'docker compose --project-directory ${WORKSPACE} --env-file ${DOCKER_ENV_FILE} -f ${DOCKER_COMPOSE_FILE} build'
+        withCredentials([file(credentialsId: 'BIBLIFLOW_DOTENV_FILE', variable: 'ENV_FILE')]) {
+          sh 'docker compose --project-directory ${WORKSPACE} --env-file "$ENV_FILE" -f ${DOCKER_COMPOSE_FILE} build'
+        }
       }
     }
 
     stage('Deploy') {
       steps {
-        sh 'docker compose --project-directory ${WORKSPACE} --env-file ${DOCKER_ENV_FILE} -f ${DOCKER_COMPOSE_FILE} up -d'
+        withCredentials([file(credentialsId: 'BIBLIFLOW_DOTENV_FILE', variable: 'ENV_FILE')]) {
+          sh 'docker compose --project-directory ${WORKSPACE} --env-file "$ENV_FILE" -f ${DOCKER_COMPOSE_FILE} up -d'
+        }
       }
     }
   }
