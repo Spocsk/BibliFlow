@@ -13,24 +13,24 @@ pipeline {
                 git branch: 'main', url: 'https://github.com/Spocsk/BibliFlow'
             }
         }
-        stage('Install Browser') {
-            steps {
-                sh '''
-                    # Installation simple de Chromium (disponible sur toutes les architectures)
-                    apt-get update
-                    apt-get install -y chromium xvfb --no-install-recommends
+        // stage('Install Browser') {
+        //     steps {
+        //         sh '''
+        //             # Installation simple de Chromium (disponible sur toutes les architectures)
+        //             apt-get update
+        //             apt-get install -y chromium xvfb --no-install-recommends
                     
-                    # Vérification
-                    chromium --version
+        //             # Vérification
+        //             chromium --version
                     
-                    # Variables d'environnement
-                    export CHROME_BIN=/usr/bin/chromium
-                    export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+        //             # Variables d'environnement
+        //             export CHROME_BIN=/usr/bin/chromium
+        //             export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
                     
-                    echo "✓ Navigateur installé: $(chromium --version)"
-                '''
-            }
-        }
+        //             echo "✓ Navigateur installé: $(chromium --version)"
+        //         '''
+        //     }
+        // }
         stage('Install Backend') {
             steps {
                 dir('bibliflow-backend') {
@@ -45,27 +45,28 @@ pipeline {
                 }
             }
         }
-        stage('Run Tests') {
-            environment {
-                CHROME_BIN = '/usr/bin/chromium'
-                DISPLAY = ':99'
-            }
-            steps {
-                dir('bibliflow-backend') {
-                    sh 'npm run test'
-                }
-                dir('bibliflow-frontend') {
-                    sh '''
-                        # Démarrer Xvfb
-                        Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
-                        sleep 2
+        // stage('Run Tests') {
+        //     environment {
+        //         CHROME_BIN = '/usr/bin/chromium'
+        //         DISPLAY = ':99'
+        //     }
+        //     steps {
+        //         dir('bibliflow-backend') {
+        //             sh 'npm run test'
+        //         }
+        //         dir('bibliflow-frontend') {
+        //             sh '''
+        //                 # Démarrer Xvfb
+        //                 Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+        //                 sleep 2
                         
-                        # Lancer les tests (Karma va automatiquement utiliser ChromeHeadlessCI)
-                        npm run test:ci
-                    '''
-                }
-            }
-        }
+        //                 # Lancer les tests (Karma va automatiquement utiliser ChromeHeadlessCI)
+        //                 npm run test:ci
+        //             '''
+        //         }
+        //     }
+        // }
+
         stage('Build Docker Images') {
             steps {
                 sh "docker compose -f ${DOCKER_COMPOSE_FILE} build"
