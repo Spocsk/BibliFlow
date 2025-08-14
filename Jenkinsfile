@@ -5,9 +5,7 @@ pipeline {
     }
     environment {
         DOCKER_COMPOSE_FILE = "compose.yml"
-        CHROME_BIN = "/usr/bin/chromium"
-        PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
-        PUPPETEER_EXECUTABLE_PATH = "/usr/bin/chromium"
+        CI = "true"
     }
     stages {
         stage('Checkout') {
@@ -15,27 +13,21 @@ pipeline {
                 git branch: 'main', url: 'https://github.com/Spocsk/BibliFlow'
             }
         }
-        stage('Install System Dependencies') {
+        stage('Install Browser') {
             steps {
                 sh '''
-                    # Update package lists
+                    # Installation simple de Chromium (disponible sur toutes les architectures)
                     apt-get update
+                    apt-get install -y chromium xvfb --no-install-recommends
                     
-                    # Install Chromium and dependencies for ARM64/AMD64
-                    apt-get install -y chromium xvfb dbus-x11 --no-install-recommends
+                    # Vérification
+                    chromium --version
                     
-                    # Verify chromium installation
-                    chromium --version || echo "Chromium version check failed"
-                    which chromium || echo "Chromium not found in PATH"
+                    # Variables d'environnement
+                    export CHROME_BIN=/usr/bin/chromium
+                    export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
                     
-                    # Create symlinks for compatibility
-                    ln -sf /usr/bin/chromium /usr/bin/chromium-browser || true
-                    ln -sf /usr/bin/chromium /usr/bin/google-chrome || true
-                    
-                    # Clean up apt cache
-                    rm -rf /var/lib/apt/lists/*
-                    
-                    echo "CHROME_BIN will be: $CHROME_BIN"
+                    echo "✓ Navigateur installé: $(chromium --version)"
                 '''
             }
         }
@@ -54,18 +46,22 @@ pipeline {
             }
         }
         stage('Run Tests') {
+            environment {
+                CHROME_BIN = '/usr/bin/chromium'
+                DISPLAY = ':99'
+            }
             steps {
                 dir('bibliflow-backend') {
                     sh 'npm run test'
                 }
                 dir('bibliflow-frontend') {
                     sh '''
-                        # Verify Chrome is available
-                        echo "CHROME_BIN is set to: $CHROME_BIN"
-                        ls -la $CHROME_BIN || echo "Chrome binary not found at $CHROME_BIN"
+                        # Démarrer Xvfb
+                        Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+                        sleep 2
                         
-                        # Run tests with explicit Chrome path
-                        CHROME_BIN=$CHROME_BIN npm run test:ci -- --browsers=ChromeHeadlessNoSandbox
+                        # Lancer les tests (Karma va automatiquement utiliser ChromeHeadlessCI)
+                        npm run test:ci
                     '''
                 }
             }
@@ -79,6 +75,11 @@ pipeline {
             steps {
                 sh "docker compose -f ${DOCKER_COMPOSE_FILE} up -d"
             }
+        }
+    }
+    post {
+        always {
+            sh 'pkill -f Xvfb || true'
         }
     }
 }
