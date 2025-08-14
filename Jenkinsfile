@@ -3,6 +3,7 @@ pipeline {
 
   options {
     disableConcurrentBuilds()
+    timestamps()
   }
 
   tools {
@@ -10,8 +11,11 @@ pipeline {
   }
 
   environment {
-    DOCKER_COMPOSE_FILE = "${WORKSPACE}/compose.yml"   // compose à la racine
-    COMPOSE_PROJECT_NAME = "bibliflow"                 // projet fixe, idempotent
+    // === Deploy ===
+    DOCKER_COMPOSE_DEPLOY_BASE = "${WORKSPACE}/compose.yml"
+    DOCKER_COMPOSE_DEPLOY_OVR  = "${WORKSPACE}/compose.ci.deploy.yml" // optionnel
+    COMPOSE_PROJECT_NAME_DEPLOY = "bibliflow"
+
     CI = "true"
   }
 
@@ -22,55 +26,65 @@ pipeline {
       }
     }
 
-    // Si tu utilises le credential Secret file pour .env :
-    stage('Prepare .env (from credentials)') {
-      steps {
-        withCredentials([file(credentialsId: 'BIBLIFLOW_DOTENV_FILE', variable: 'ENV_FILE')]) {
-          sh '''
-            cp "$ENV_FILE" "${WORKSPACE}/.env"
-            chmod 600 "${WORKSPACE}/.env"
-            echo "✓ .env copied to ${WORKSPACE}/.env"
-          '''
-        }
-      }
-    }
-
     stage('Preflight') {
       steps {
         dir("${WORKSPACE}") {
           sh 'pwd && ls -la'
-          sh 'test -f ${DOCKER_COMPOSE_FILE} && echo "OK: compose.yml found" || (echo "ERROR: compose.yml missing" && exit 1)'
-          sh 'test -f .env && echo "OK: .env present" || (echo "ERROR: .env missing" && exit 1)'
+          sh 'test -f ${DOCKER_COMPOSE_DEPLOY_BASE} && echo "OK: compose.yml found" || (echo "ERROR: compose.yml missing" && exit 1)'
+          // l'override de déploiement est optionnel
+          sh '[ -f ${DOCKER_COMPOSE_DEPLOY_OVR} ] && echo "compose.ci.deploy.yml present (will be used)" || echo "compose.ci.deploy.yml not present (will be skipped)"'
         }
       }
     }
 
-    // 1) DOWN — proprement, sans supprimer les volumes (on garde les données)
-    stage('Teardown stack') {
+    // Préparer .env depuis Credentials (Secret file)
+    stage('Prepare .env (from credentials)') {
       steps {
-        sh 'docker compose -p ${COMPOSE_PROJECT_NAME} --project-directory ${WORKSPACE} -f ${DOCKER_COMPOSE_FILE} down --remove-orphans || true'
+        withCredentials([file(credentialsId: 'BIBLIFLOW_DOTENV_FILE', variable: 'ENV_FILE')]) {
+          sh 'cp "$ENV_FILE" "${WORKSPACE}/.env" && chmod 600 "${WORKSPACE}/.env" && echo "✓ .env copied"'
+        }
       }
     }
 
-    // 2) BUILD — rebuild des images (tous les services dont on a besoin)
-    stage('Build images') {
+    // Construire la liste des fichiers -f à utiliser (override optionnel)
+    stage('Assemble deploy compose files') {
       steps {
-        sh 'docker compose -p ${COMPOSE_PROJECT_NAME} --project-directory ${WORKSPACE} -f ${DOCKER_COMPOSE_FILE} build postgres mongodb backend frontend'
+        sh '''
+          DEPLOY_FILES="-f ${DOCKER_COMPOSE_DEPLOY_BASE}"
+          if [ -f "${DOCKER_COMPOSE_DEPLOY_OVR}" ]; then
+            DEPLOY_FILES="$DEPLOY_FILES -f ${DOCKER_COMPOSE_DEPLOY_OVR}"
+          fi
+          echo "$DEPLOY_FILES" > .deploy_files
+          echo "Using compose files: $(cat .deploy_files)"
+        '''
       }
     }
 
-    // 3) UP — relancer les services (on évite de lancer le service jenkins du compose)
-    stage('Deploy stack') {
+    // Down → Build → Up
+    stage('Deploy - Down') {
       steps {
-        sh 'docker compose -p ${COMPOSE_PROJECT_NAME} --project-directory ${WORKSPACE} -f ${DOCKER_COMPOSE_FILE} up -d postgres mongodb backend frontend'
+        sh 'docker compose -p ${COMPOSE_PROJECT_NAME_DEPLOY} --project-directory ${WORKSPACE} $(cat .deploy_files) down --remove-orphans || true'
+      }
+    }
+
+    stage('Deploy - Build') {
+      steps {
+        sh 'docker compose -p ${COMPOSE_PROJECT_NAME_DEPLOY} --project-directory ${WORKSPACE} $(cat .deploy_files) build postgres mongodb backend frontend'
+      }
+    }
+
+    stage('Deploy - Up') {
+      steps {
+        sh 'docker compose -p ${COMPOSE_PROJECT_NAME_DEPLOY} --project-directory ${WORKSPACE} $(cat .deploy_files) up -d postgres mongodb backend frontend'
       }
     }
   }
 
   post {
     always {
-      // Nettoie l’éventuel .env écrit depuis le credential
+      // Nettoyage des fichiers sensibles/temporaires
       sh 'shred -u "${WORKSPACE}/.env" || rm -f "${WORKSPACE}/.env" || true'
+      sh 'rm -f .deploy_files || true'
     }
   }
 }
