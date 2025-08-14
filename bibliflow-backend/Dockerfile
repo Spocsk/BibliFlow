@@ -1,81 +1,40 @@
-FROM node:22-alpine AS dependencies
-
+# Backend Dockerfile
+FROM node:22-alpine AS base
 WORKDIR /app
 
-RUN apk add --no-cache \
-    python3 \
-    make \
-    g++ \
-    curl
-
+# Stage de développement
+FROM base AS development
+# Copier package.json et package-lock.json
 COPY package*.json ./
 
-RUN npm ci --only=production && npm cache clean --force
-
-FROM node:22-alpine AS builder
-
-WORKDIR /app
-
-RUN apk add --no-cache \
-    python3 \
-    make \
-    g++
-
-COPY package*.json ./
-
+# Installer toutes les dépendances (dev incluses)
 RUN npm ci
 
+# Copier le reste du code (sera overridé par le volume en dev)
 COPY . .
 
-RUN npm run build
-
-FROM node:22-alpine AS development
-
-WORKDIR /usr/src/app
-
-RUN apk add --no-cache \
-    python3 \
-    make \
-    g++ \
-    curl \
-    bash \
-    git
-
-RUN npm install -g @nestjs/cli nodemon
-
-COPY package*.json ./
-
-RUN npm install
-
+# Exposer le port
 EXPOSE 3000 9229
 
-ENV NODE_ENV=development
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:3000/health || exit 1
-
+# Commande par défaut (sera overridée par docker-compose)
 CMD ["npm", "run", "start:dev"]
 
-FROM node:22-alpine AS production
+# Stage de production
+FROM base AS production
+# Copier package.json et package-lock.json
+COPY package*.json ./
 
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nestjs -u 1001
+# Installer uniquement les dépendances de production
+RUN npm ci --only=production
 
-WORKDIR /app
+# Copier le code source
+COPY . .
 
-RUN apk add --no-cache curl dumb-init
+# Build de l'application
+RUN npm run build
 
-COPY --from=dependencies --chown=nestjs:nodejs /app/node_modules ./node_modules
-COPY --from=dependencies --chown=nestjs:nodejs /app/package*.json ./
-COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
-
-USER nestjs
-
+# Exposer le port
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:3000/health || exit 1
-
-ENTRYPOINT ["dumb-init", "--"]
-
-CMD ["node", "dist/main.js"]
+# Commande de production
+CMD ["npm", "run", "start:prod"]

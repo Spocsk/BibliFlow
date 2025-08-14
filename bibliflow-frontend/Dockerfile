@@ -1,70 +1,47 @@
-FROM node:22-alpine AS development
-
-WORKDIR /usr/src/app
-
-RUN apk add --no-cache \
-    python3 \
-    make \
-    g++ \
-    curl \
-    bash \
-    git
-
-RUN npm install -g @angular/cli@latest
-
-COPY package*.json ./
-
-RUN npm install
-
-EXPOSE 4200
-
-ENV NODE_ENV=development
-ENV CHOKIDAR_USEPOLLING=true
-
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:4200 || exit 1
-
-CMD ["ng", "serve", "--host", "0.0.0.0", "--port", "4200", "--poll", "2000"]
-
-FROM node:22-alpine AS builder
-
+# Frontend Dockerfile
+FROM node:22-alpine AS base
 WORKDIR /app
 
-RUN apk add --no-cache \
-    python3 \
-    make \
-    g++
-
+# Stage de développement
+FROM base AS development
+# Copier package.json et package-lock.json
 COPY package*.json ./
 
-RUN npm cache clean --force
+# Installer toutes les dépendances (dev incluses)
+RUN npm ci
 
-RUN npm ci --only=production && npm rebuild
+# Installer Angular CLI globalement
+RUN npm install -g @angular/cli
 
-RUN npm install -g @angular/cli@latest
+# Copier le reste du code (sera overridé par le volume en dev)
+COPY . .
 
-COPY src ./src
-COPY angular.json tsconfig.json tsconfig.app.json tsconfig.spec.json ./
-COPY public ./public 2>/dev/null || true
+# Exposer le port
+EXPOSE 4200
 
-RUN ng build --configuration=production
+# Commande par défaut (sera overridée par docker-compose)
+CMD ["ng", "serve", "--host", "0.0.0.0", "--poll", "2000"]
 
-FROM nginx:1.25-alpine AS production
+# Stage de build
+FROM base AS build
+# Copier package.json et package-lock.json
+COPY package*.json ./
 
-RUN apk add --no-cache curl
+# Installer les dépendances
+RUN npm ci
 
+# Installer Angular CLI
+RUN npm install -g @angular/cli
+
+# Copier le code source
+COPY . .
+
+# Build de l'application
+RUN ng build --configuration production
+
+# Stage de production avec nginx
+FROM nginx:alpine AS production
+COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf
-
-COPY --from=builder /app/dist/bibliflow-frontend /usr/share/nginx/html
-
-COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
-
 EXPOSE 80
-
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost || exit 1
-
-ENTRYPOINT ["/docker-entrypoint.sh"]
-
 CMD ["nginx", "-g", "daemon off;"]
