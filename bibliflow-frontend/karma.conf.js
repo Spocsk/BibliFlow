@@ -1,4 +1,3 @@
-// karma.conf.js - À créer à la racine du projet Angular
 module.exports = function (config) {
   config.set({
     basePath: "",
@@ -46,6 +45,19 @@ module.exports = function (config) {
           "--no-first-run",
           "--disable-extensions",
           "--remote-debugging-port=9222",
+        ],
+      },
+      // Alias pour compatibilité avec vos scripts existants
+      ChromeHeadlessNoSandbox: {
+        base: "ChromeHeadless",
+        flags: [
+          "--no-sandbox",
+          "--disable-web-security",
+          "--disable-gpu",
+          "--disable-dev-shm-usage",
+          "--disable-setuid-sandbox",
+          "--no-first-run",
+          "--disable-extensions",
         ],
       },
     },
